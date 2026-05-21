@@ -1,0 +1,76 @@
+Apenas notas sobre o aprendizado de react:
+
+Em package.json conseguimos ver todas as dependencias que estão instaladas no projeto.
+
+Em React, uma função que retorna JSX é chamada de _componente_. (Tipo a Função App) 
+
+JSX é tipo o html do react, o return em jsx da função (que é um componente) serve pra
+mostrar o que deverá ser desenhado na tela (texto, botão, gráfico e etc)
+
+
+    * FRAGMENT: Usado pra renderizar mais de um componente sem criar um view.
+
+return (
+  <>
+    <StatusBar style="auto" />
+
+    <View style={styles.container}>
+      <Text>Oi</Text>
+    </View>
+  </>
+);
+Esse <>...</> chama Fragment. Ele serve para retornar mais de um componente sem criar 
+uma View extra.
+
+Sobre várias StatusBar: normalmente tu não coloca várias ao mesmo tempo na mesma tela. Mas em apps com várias telas,
+cada tela pode configurar a StatusBar de um jeito. Quando a tela muda,
+a configuração ativa muda também.
+
+--------------------------------------------------------------------
+
+    *       FLEX: o flex é usado pra proporção, se eu tenho 2 elementos A e B dentro de uma view, sendo o A 
+um elemento com padding 1 e o B elemento com padding 2, a proporção de A:B fica 1:2.
+
+--------------------------------------------------------------------
+
+import React, { useState } from 'react';
+
+useState:
+serve pra tu criar uma variavel e uma função que atualiza essa variável. Por algum motivo agt usa const ao
+inves de let:
+
+    const [fodase, setFodase] = useState(true);
+fodase é true, se eu quiser atualizar o valor de fodase, posso fazer
+    setFodase(false);
+
+arrow function ( => ):
+esse implica ai é basicamente uma forma de tu declarar uma função de modo ultra conciso, tipo const somar = (a,b) => a + b
+ai tu pode fazer somar(2, 4) e vai retornar 6.
+Usando isso no botão em react:
+
+onPress = {() => fazerAlgumacoisa()}
+
+
+    "ah mas porque as chaves?"
+porque quando tu ta socando um javascript dentro do JSX, tu acaba precisando colocar as chaves pra especificar que oq vem ali é uma função javascript.
+
+____________________________________________________________________
+
+    "porquê o parenteses antes do return?"
+Poderia ser:
+
+return <Text>Oi</Text>;
+Mas quando fica grande, fazemos:
+
+return (
+  <View>
+    <Text>Oi</Text>
+  </View>
+);
+
+pra organizar os blocos dentro do JSX, ele agrupa o conteúdo que será retornado.
+
+______________________________________________________________________
+
+agora, o parênteses dentro do StyleSheet é usado mais por conta do conteúdo ser justamente uma função (é os parênteses da função)
+
