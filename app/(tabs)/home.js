@@ -6,7 +6,7 @@ export default function Home() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>UFSC Segura</Text>
-
+    
       <Pressable style={styles.button} onPress={() => router.push('/mainmap')}>
         <Text style={styles.buttonText}>Abrir mapa</Text>
       </Pressable>

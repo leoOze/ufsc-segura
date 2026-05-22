@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polygon, Polyline } from 'react-native-maps';
+import * as Location from 'expo-location';
 
-const initialRegion = {
+const defaultRegion = {
   latitude: -27.6017,
   longitude: -48.5192,
-  latitudeDelta: 0.01,
-  longitudeDelta: 0.01,
+  latitudeDelta: 0.005,
+  longitudeDelta: 0.005,
 };
 
 const reportTypes = [
@@ -26,11 +27,39 @@ const reportTypes = [
 ];
 
 export default function MainMap() {
+  const [region, setRegion] = useState(defaultRegion);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
   const [selectedReportType, setSelectedReportType] = useState(null);
   const [reportLocation, setReportLocation] = useState(null);
   const [reportAreaPoints, setReportAreaPoints] = useState([]);
+
+  useEffect(() => {
+    async function getLocation() {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+
+        if (status !== 'granted') {
+          console.warn('A permissao de localizacao foi negada');
+          return;
+        }
+
+        const location = await Location.getCurrentPositionAsync({});
+        const { latitude, longitude } = location.coords;
+
+        setRegion({
+          latitude,
+          longitude,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        });
+      } catch (error) {
+        console.warn('Nao foi possivel obter a localizacao', error);
+      }
+    }
+
+    getLocation();
+  }, []);
 
   const isPolygonReport = selectedReportType?.geometry === 'polygon';
   const canConfirmReport = isPolygonReport
@@ -43,8 +72,8 @@ export default function MainMap() {
       type.geometry === 'polygon'
         ? null
         : {
-            latitude: initialRegion.latitude,
-            longitude: initialRegion.longitude,
+            latitude: region.latitude,
+            longitude: region.longitude,
           }
     );
     setReportAreaPoints([]);
@@ -141,7 +170,10 @@ export default function MainMap() {
     <View style={styles.container}>
       <MapView
         style={styles.map}
-        initialRegion={initialRegion}
+        initialRegion={defaultRegion}
+        region={region}
+        showsUserLocation
+        onRegionChangeComplete={setRegion}
         onPress={(event) => {
           if (!selectedReportType) {
             return;
