@@ -1,12 +1,15 @@
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View ,Image} from 'react-native';
 
 export default function Home() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>UFSC Segura</Text>
-    
+      <Image
+       source={require('../../assets/brasao-ufsc-logo.png')}
+      style={styles.brasao}/>
+
       <Pressable style={styles.button} onPress={() => router.push('/mainmap')}>
         <Text style={styles.buttonText}>Abrir mapa</Text>
       </Pressable>
@@ -33,9 +36,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 28,
     fontWeight: '700',
-    marginBottom: 24,
+    marginBottom: 5,
   },
-
+  brasao:{
+    width:100,
+    height:100,
+    resizeMode:'contain',
+  },
   button: {
     width: '100%',
     maxWidth: 280,
