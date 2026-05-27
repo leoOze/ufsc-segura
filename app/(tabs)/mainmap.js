@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import MapView, { Marker, Polygon, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 import {
@@ -60,6 +60,9 @@ export default function MainMap() {
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
   const [selectedReportType, setSelectedReportType] = useState(null);
+  const [reportTitle, setReportTitle] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
+  const [reportPhotoUrl, setReportPhotoUrl] = useState('');
   const [reportLocation, setReportLocation] = useState(null);
   const [reportAreaPoints, setReportAreaPoints] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
@@ -114,6 +117,9 @@ export default function MainMap() {
     setErrorMessage('');
     setSelectedBackendReport(null);
     setSelectedReportType(type);
+    setReportTitle(type.title);
+    setReportDescription('');
+    setReportPhotoUrl('');
     setReportLocation(
       type.geometry === 'polygon'
         ? null
@@ -130,6 +136,9 @@ export default function MainMap() {
     setReportLocation(null);
     setReportAreaPoints([]);
     setSelectedReportType(null);
+    setReportTitle('');
+    setReportDescription('');
+    setReportPhotoUrl('');
     setIsReportOpen(false);
     setIsTypePickerOpen(false);
     setErrorMessage('');
@@ -256,6 +265,10 @@ export default function MainMap() {
     setIsSubmitting(true);
 
     try {
+      if (!reportTitle.trim()) {
+        throw new Error('Titulo e obrigatorio');
+      }
+
       const geometry = isPolygonReport
         ? {
             type: 'Polygon',
@@ -267,6 +280,9 @@ export default function MainMap() {
           };
 
       await createReport({
+        title: reportTitle.trim(),
+        description: reportDescription.trim(),
+        photoUrl: reportPhotoUrl.trim(),
         geometryType: isPolygonReport ? 'polygon' : 'point',
         geometry,
       });
@@ -407,10 +423,25 @@ export default function MainMap() {
       {selectedBackendReport && !selectedReportType && (
         <View style={styles.reportDetailsPanel}>
           <Text style={styles.reportDetailsTitle}>
-            {selectedBackendReport.geometryType === 'polygon'
-              ? 'Local sem luz'
-              : 'Ocorrencia'}
+            {selectedBackendReport.title ||
+              (selectedBackendReport.geometryType === 'polygon'
+                ? 'Local sem luz'
+                : 'Ocorrencia')}
           </Text>
+
+          {selectedBackendReport.description ? (
+            <Text style={styles.reportDetailsText}>
+              {selectedBackendReport.description}
+            </Text>
+          ) : null}
+
+          {selectedBackendReport.photoUrl ? (
+            <Image
+              source={{ uri: selectedBackendReport.photoUrl }}
+              style={styles.reportPhoto}
+            />
+          ) : null}
+
           <Text style={styles.reportDetailsText}>
             Upvotes: {selectedBackendReport.upVotes || 0}
           </Text>
@@ -453,6 +484,31 @@ export default function MainMap() {
                 Pontos da area: {reportAreaPoints.length}
               </Text>
             )}
+
+            <TextInput
+              style={styles.input}
+              placeholder="Titulo"
+              value={reportTitle}
+              onChangeText={setReportTitle}
+            />
+
+            <TextInput
+              style={[styles.input, styles.descriptionInput]}
+              multiline
+              placeholder="Descricao"
+              textAlignVertical="top"
+              value={reportDescription}
+              onChangeText={setReportDescription}
+            />
+
+            <TextInput
+              style={styles.input}
+              autoCapitalize="none"
+              keyboardType="url"
+              placeholder="URL da foto"
+              value={reportPhotoUrl}
+              onChangeText={setReportPhotoUrl}
+            />
 
             {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
@@ -682,6 +738,22 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
 
+  input: {
+    width: '100%',
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: '#d6d6d6',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+    color: '#000',
+  },
+
+  descriptionInput: {
+    minHeight: 96,
+  },
+
   errorText: {
     color: '#d90429',
     marginBottom: 12,
@@ -730,6 +802,14 @@ const styles = StyleSheet.create({
   reportDetailsText: {
     color: '#333',
     marginBottom: 4,
+  },
+
+  reportPhoto: {
+    width: '100%',
+    height: 160,
+    borderRadius: 8,
+    backgroundColor: '#e7e7e7',
+    marginBottom: 12,
   },
 
   voteActions: {
