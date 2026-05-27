@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polygon, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
+import {
+  createReport,
+  downvoteReport,
+  getReports,
+  upvoteReport,
+} from '../../services/api';
 
 const defaultRegion = {
   latitude: -27.6017,
@@ -26,13 +32,38 @@ const reportTypes = [
   },
 ];
 
+function coordinateToGeoJsonPoint(coordinate) {
+  return [coordinate.longitude, coordinate.latitude];
+}
+
+function geoJsonPointToCoordinate(coordinates) {
+  return {
+    latitude: coordinates[1],
+    longitude: coordinates[0],
+  };
+}
+
+function areaPointsToGeoJsonPolygon(points) {
+  const coordinates = points.map(coordinateToGeoJsonPoint);
+  coordinates.push(coordinateToGeoJsonPoint(points[0]));
+  return [coordinates];
+}
+
+function geoJsonPolygonToCoordinates(coordinates) {
+  return coordinates[0].map(geoJsonPointToCoordinate);
+}
+
 export default function MainMap() {
   const [region, setRegion] = useState(defaultRegion);
+  const [reports, setReports] = useState([]);
+  const [selectedBackendReport, setSelectedBackendReport] = useState(null);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
   const [selectedReportType, setSelectedReportType] = useState(null);
   const [reportLocation, setReportLocation] = useState(null);
   const [reportAreaPoints, setReportAreaPoints] = useState([]);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     async function getLocation() {
@@ -61,12 +92,27 @@ export default function MainMap() {
     getLocation();
   }, []);
 
+  useEffect(() => {
+    loadReports();
+  }, []);
+
   const isPolygonReport = selectedReportType?.geometry === 'polygon';
   const canConfirmReport = isPolygonReport
     ? reportAreaPoints.length >= 3
     : Boolean(reportLocation);
 
+  async function loadReports() {
+    try {
+      const data = await getReports();
+      setReports(data);
+    } catch (error) {
+      setErrorMessage(error.message);
+    }
+  }
+
   function startReport(type) {
+    setErrorMessage('');
+    setSelectedBackendReport(null);
     setSelectedReportType(type);
     setReportLocation(
       type.geometry === 'polygon'
@@ -86,6 +132,7 @@ export default function MainMap() {
     setSelectedReportType(null);
     setIsReportOpen(false);
     setIsTypePickerOpen(false);
+    setErrorMessage('');
   }
 
   function addAreaPoint(coordinate) {
@@ -166,6 +213,97 @@ export default function MainMap() {
     );
   }
 
+  function renderStoredReports() {
+    return reports.map((report) => {
+      if (report.geometry?.type === 'Point') {
+        return (
+          <Marker
+            key={report._id}
+            coordinate={geoJsonPointToCoordinate(report.geometry.coordinates)}
+            onPress={() => {
+              setSelectedBackendReport(report);
+            }}
+          >
+            <View style={styles.storedMarker}>
+              <Text style={styles.customMarkerText}>!</Text>
+            </View>
+          </Marker>
+        );
+      }
+
+      if (report.geometry?.type === 'Polygon') {
+        return (
+          <Polygon
+            key={report._id}
+            coordinates={geoJsonPolygonToCoordinates(report.geometry.coordinates)}
+            strokeColor="#f9c74f"
+            fillColor="rgba(249, 199, 79, 0.28)"
+            strokeWidth={3}
+            tappable
+            onPress={() => {
+              setSelectedBackendReport(report);
+            }}
+          />
+        );
+      }
+
+      return null;
+    });
+  }
+
+  async function submitReport() {
+    setErrorMessage('');
+    setIsSubmitting(true);
+
+    try {
+      const geometry = isPolygonReport
+        ? {
+            type: 'Polygon',
+            coordinates: areaPointsToGeoJsonPolygon(reportAreaPoints),
+          }
+        : {
+            type: 'Point',
+            coordinates: coordinateToGeoJsonPoint(reportLocation),
+          };
+
+      await createReport({
+        geometryType: isPolygonReport ? 'polygon' : 'point',
+        geometry,
+      });
+
+      await loadReports();
+      cancelReport();
+    } catch (error) {
+      setErrorMessage(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleVote(voteType) {
+    if (!selectedBackendReport) {
+      return;
+    }
+
+    setErrorMessage('');
+
+    try {
+      const updatedReport =
+        voteType === 'up'
+          ? await upvoteReport(selectedBackendReport._id)
+          : await downvoteReport(selectedBackendReport._id);
+
+      setReports((currentReports) =>
+        currentReports.map((report) =>
+          report._id === updatedReport._id ? updatedReport : report
+        )
+      );
+      setSelectedBackendReport(updatedReport);
+    } catch (error) {
+      setErrorMessage(error.message);
+    }
+  }
+
   return (
     <View style={styles.container}>
       <MapView
@@ -189,6 +327,7 @@ export default function MainMap() {
           }
         }}
       >
+        {renderStoredReports()}
         {renderReportDraft()}
       </MapView>
 
@@ -265,6 +404,43 @@ export default function MainMap() {
         </View>
       )}
 
+      {selectedBackendReport && !selectedReportType && (
+        <View style={styles.reportDetailsPanel}>
+          <Text style={styles.reportDetailsTitle}>
+            {selectedBackendReport.geometryType === 'polygon'
+              ? 'Local sem luz'
+              : 'Ocorrencia'}
+          </Text>
+          <Text style={styles.reportDetailsText}>
+            Upvotes: {selectedBackendReport.upVotes || 0}
+          </Text>
+          <Text style={styles.reportDetailsText}>
+            Downvotes: {selectedBackendReport.downVotes || 0}
+          </Text>
+
+          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+
+          <View style={styles.voteActions}>
+            <Pressable style={styles.voteButton} onPress={() => handleVote('up')}>
+              <Text style={styles.voteButtonText}>Upvote</Text>
+            </Pressable>
+            <Pressable style={styles.voteButton} onPress={() => handleVote('down')}>
+              <Text style={styles.voteButtonText}>Downvote</Text>
+            </Pressable>
+          </View>
+
+          <Pressable
+            style={styles.closeDetailsButton}
+            onPress={() => {
+              setSelectedBackendReport(null);
+              setErrorMessage('');
+            }}
+          >
+            <Text style={styles.closeDetailsText}>Fechar</Text>
+          </Pressable>
+        </View>
+      )}
+
       {isReportOpen && (
         <View style={styles.overlay}>
           <View style={styles.reportPanel}>
@@ -278,13 +454,25 @@ export default function MainMap() {
               </Text>
             )}
 
+            {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+
             <Pressable
-              style={styles.closeButton}
+              style={[styles.closeButton, isSubmitting && styles.disabledButton]}
+              disabled={isSubmitting}
+              onPress={submitReport}
+            >
+              <Text style={styles.closeButtonText}>
+                {isSubmitting ? 'Enviando...' : 'Enviar report'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.secondaryPanelButton}
               onPress={() => {
                 cancelReport();
               }}
             >
-              <Text style={styles.closeButtonText}>Fechar</Text>
+              <Text style={styles.secondaryPanelButtonText}>Cancelar</Text>
             </Pressable>
           </View>
         </View>
@@ -440,6 +628,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
+  storedMarker: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#d90429',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   areaPointMarker: {
     width: 28,
     height: 28,
@@ -485,6 +682,11 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
 
+  errorText: {
+    color: '#d90429',
+    marginBottom: 12,
+  },
+
   closeButton: {
     backgroundColor: '#000',
     padding: 12,
@@ -494,6 +696,69 @@ const styles = StyleSheet.create({
 
   closeButtonText: {
     color: '#fff',
+    fontWeight: '700',
+  },
+
+  secondaryPanelButton: {
+    padding: 12,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+
+  secondaryPanelButtonText: {
+    color: '#000',
+    fontWeight: '700',
+  },
+
+  reportDetailsPanel: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    left: 20,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 16,
+  },
+
+  reportDetailsTitle: {
+    color: '#000',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+
+  reportDetailsText: {
+    color: '#333',
+    marginBottom: 4,
+  },
+
+  voteActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+
+  voteButton: {
+    flex: 1,
+    backgroundColor: '#000',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+
+  voteButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+
+  closeDetailsButton: {
+    padding: 12,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+
+  closeDetailsText: {
+    color: '#000',
     fontWeight: '700',
   },
 });
