@@ -9,7 +9,6 @@ import {
   getReports,
   upvoteReport,
 } from '../../services/api';
-import multer from 'multer';
 
 const defaultRegion = {
   latitude: -27.6017,
@@ -19,9 +18,80 @@ const defaultRegion = {
 };
 
 const reportTypes = [
+  
   {
-    id: 'generic',
-    title: 'Ocorrencia',
+    id: 'atividadesuspeita',
+    title: 'Atividade Suspeita',
+    geometry: 'marker',
+    color: '#d90429',
+    symbol: '!',
+  },
+  {
+    id: 'furto',
+    title: 'Furto',
+    geometry: 'marker',
+    color: '#d90429',
+    symbol: '!',
+  },
+  {
+    id: 'assalto',
+    title: 'Assalto',
+    geometry: 'marker',
+    color: '#d90429',
+    symbol: '!',
+  },
+  {
+    id: 'sequestro',
+    title: 'Sequestro',
+    geometry: 'marker',
+    color: '#d90429',
+    symbol: '!',
+  },
+  {
+    id: 'violenciasexual',
+    title: 'Violência Sexual',
+    geometry: 'marker',
+    color: '#d90429',
+    symbol: '!',
+  },
+  {
+    id: 'pichacao',
+    title: 'Pichação',
+    geometry: 'marker',
+    color: '#d90429',
+    symbol: '!',
+  },
+  {
+    id: 'buraco',
+    title: 'Buraco',
+    geometry: 'marker',
+    color: '#6909f1',
+    symbol: '!',
+  },
+  {
+    id: 'problemasnacerca',
+    title: 'Problemas na cerca (furo, rasgo ou não tem)',
+    geometry: 'marker',
+    color: '#6909f1',
+    symbol: '!',
+  },
+  {
+    id: 'vazamento',
+    title: 'Vazamento',
+    geometry: 'marker',
+    color: '#d90429',
+    symbol: '!',
+  },
+  {
+    id: 'alagamento',
+    title: 'Alagamento',
+    geometry: 'marker',
+    color: '#d90429',
+    symbol: '!',
+  },
+  {
+    id: 'problemaestrutural',
+    title: 'Problema Estrutural',
     geometry: 'marker',
     color: '#d90429',
     symbol: '!',
@@ -30,7 +100,14 @@ const reportTypes = [
     id: 'dark-area',
     title: 'Local sem luz',
     geometry: 'polygon',
-    color: '#f9c74f',
+    color: '#000000',
+  },
+  {
+    id: 'outro',
+    title: 'Outro',
+    geometry: 'marker',
+    color: '#d90429',
+    symbol: '!',
   },
 ];
 
@@ -313,9 +390,11 @@ export default function MainMap() {
             { backgroundColor: selectedReportType.color },
           ]}
         >
-          <Text style={styles.customMarkerText}>
-            {selectedReportType.symbol}
-          </Text>
+          {selectedReportType.icon ? (
+              <Image source={selectedReportType.icon} style={styles.markerIcon} />
+            ) : (
+              <Text style={styles.customMarkerText}>{selectedReportType.symbol}</Text>
+            )}
         </View>
       </Marker>
     );
@@ -390,6 +469,7 @@ export default function MainMap() {
           };
 
       await createReport({
+        typeId: selectedReportType.id,
         title: reportTitle.trim(),
         description: reportDescription.trim(),
         photoUrl: reportPhotoUrl.trim(),
