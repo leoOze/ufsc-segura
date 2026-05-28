@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 export default function Estatisticas() {
   return (
     <View style={styles.container}>
-      <Text style={styles.titulo}>Estatisticas</Text>adding:15,
+      <Text style={styles.titulo}>Estatisticas</Text>
       <View style={styles.box}>
         <Text style={styles.luz}>Locais com problema de luz : </Text>
         <Text style={styles.ocorrencias}>Número de ocorrências: </Text>

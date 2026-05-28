@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import MapView, { Marker, Polygon, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 import {
   createReport,
   downvoteReport,
   getReports,
   upvoteReport,
 } from '../../services/api';
+import multer from 'multer';
 
 const defaultRegion = {
   latitude: -27.6017,
@@ -67,6 +69,7 @@ export default function MainMap() {
   const [reportAreaPoints, setReportAreaPoints] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedPhotoUri, setSelectedPhotoUri] = useState(null);
 
   useEffect(() => {
     async function getLocation() {
@@ -120,6 +123,7 @@ export default function MainMap() {
     setReportTitle(type.title);
     setReportDescription('');
     setReportPhotoUrl('');
+    setSelectedPhotoUri(null);
     setReportLocation(
       type.geometry === 'polygon'
         ? null
@@ -139,6 +143,7 @@ export default function MainMap() {
     setReportTitle('');
     setReportDescription('');
     setReportPhotoUrl('');
+    setSelectedPhotoUri(null);
     setIsReportOpen(false);
     setIsTypePickerOpen(false);
     setErrorMessage('');
@@ -152,6 +157,100 @@ export default function MainMap() {
     setReportAreaPoints((currentPoints) => currentPoints.slice(0, -1));
   }
 
+  async function askMediaPermission() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert(
+        'Permissao necessaria',
+        'Permita o acesso as fotos para escolher uma imagem.'
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  async function askCameraPermission() {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert(
+        'Permissao necessaria',
+        'Permita o acesso a camera para tirar uma foto.'
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  async function pickReportImage() {
+    const hasPermission = await askMediaPermission();
+
+    if (!hasPermission) {
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      const uri = result.assets[0].uri;
+      setSelectedPhotoUri(uri);
+      setReportPhotoUrl(uri);
+    }
+  }
+
+  async function takeReportPhoto() {
+    const hasPermission = await askCameraPermission();
+
+    if (!hasPermission) {
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      const uri = result.assets[0].uri;
+      setSelectedPhotoUri(uri);
+      setReportPhotoUrl(uri);
+    }
+  }
+  async function uploadReportPhoto(uri) {
+  const formData = new FormData();
+
+  formData.append('photo', {
+    uri,
+    name: 'report-photo.jpg',
+    type: 'image/jpeg',
+  });
+
+  const response = await fetch(`${API_URL}/reports/photo`, {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Erro ao enviar foto');
+  }
+
+  return data.photoUrl;
+}
   function renderReportDraft() {
     if (!selectedReportType) {
       return null;
@@ -263,7 +362,18 @@ export default function MainMap() {
   async function submitReport() {
     setErrorMessage('');
     setIsSubmitting(true);
+    let photoUrl = reportPhotoUrl.trim()
+    if (selectedPhotoUri?.startsWith('file://')) {
+  photoUrl = await uploadReportPhoto(selectedPhotoUri);
+}
 
+  await createReport({
+  title: reportTitle.trim(),
+  description: reportDescription.trim(),
+  photoUrl,
+  geometryType: isPolygonReport ? 'polygon' : 'point',
+  geometry,
+});
     try {
       if (!reportTitle.trim()) {
         throw new Error('Titulo e obrigatorio');
@@ -507,8 +617,40 @@ export default function MainMap() {
               keyboardType="url"
               placeholder="URL da foto"
               value={reportPhotoUrl}
-              onChangeText={setReportPhotoUrl}
+              onChangeText={(value) => {
+                setReportPhotoUrl(value);
+                setSelectedPhotoUri(value);
+              }}
             />
+
+            <View style={styles.photoActions}>
+              <Pressable style={styles.photoButton} onPress={pickReportImage}>
+                <Text style={styles.photoButtonText}>Galeria</Text>
+              </Pressable>
+
+              <Pressable style={styles.photoButton} onPress={takeReportPhoto}>
+                <Text style={styles.photoButtonText}>Camera</Text>
+              </Pressable>
+            </View>
+
+            {selectedPhotoUri ? (
+              <>
+                <Image
+                  source={{ uri: selectedPhotoUri }}
+                  style={styles.selectedPhoto}
+                />
+
+                <Pressable
+                  style={styles.secondaryPanelButton}
+                  onPress={() => {
+                    setSelectedPhotoUri(null);
+                    setReportPhotoUrl('');
+                  }}
+                >
+                  <Text style={styles.secondaryPanelButtonText}>Remover foto</Text>
+                </Pressable>
+              </>
+            ) : null}
 
             {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
@@ -752,6 +894,33 @@ const styles = StyleSheet.create({
 
   descriptionInput: {
     minHeight: 96,
+  },
+
+  photoActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+
+  photoButton: {
+    flex: 1,
+    backgroundColor: '#222',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+  },
+
+  photoButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+
+  selectedPhoto: {
+    width: '100%',
+    height: 160,
+    borderRadius: 8,
+    backgroundColor: '#e7e7e7',
+    marginBottom: 8,
   },
 
   errorText: {

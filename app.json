@@ -27,7 +27,14 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permita que o UFSC Segura acesse suas fotos para anexar imagens aos reports.",
+          "cameraPermission": "Permita que o UFSC Segura use a camera para tirar fotos dos reports."
+        }
+      ]
     ]
   }
 }
