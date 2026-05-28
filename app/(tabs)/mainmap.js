@@ -9,7 +9,6 @@ import {
   getReports,
   upvoteReport,
 } from '../../services/api';
-import multer from 'multer';
 
 const defaultRegion = {
   latitude: -27.6017,
@@ -251,6 +250,7 @@ export default function MainMap() {
 
   return data.photoUrl;
 }
+
   function renderReportDraft() {
     if (!selectedReportType) {
       return null;
@@ -374,6 +374,7 @@ export default function MainMap() {
   geometryType: isPolygonReport ? 'polygon' : 'point',
   geometry,
 });
+
     try {
       if (!reportTitle.trim()) {
         throw new Error('Titulo e obrigatorio');
