@@ -4,6 +4,14 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { login } from '../services/api';
 import { saveToken } from '../services/authStorage';
 
+function normalizeLoginInput(value) {
+  return value.replace(/\s/g, '');
+}
+
+function normalizePasswordInput(value) {
+  return value.replace(/\s/g, '');
+}
+
 export default function Login() {
   const [loginValue, setLoginValue] = useState('');
   const [password, setPassword] = useState('');
@@ -15,7 +23,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const data = await login(loginValue, password);
+      const data = await login(normalizeLoginInput(loginValue), password);
       await saveToken(data.token);
       router.replace('/home');
     } catch (error) {
@@ -32,19 +40,26 @@ export default function Login() {
       <TextInput
         style={styles.input}
         autoCapitalize="none"
+        autoCorrect={false}
         placeholder="Login"
         placeholderTextColor="#777"
         value={loginValue}
-        onChangeText={setLoginValue}
+        onChangeText={(value) => {
+          setLoginValue(normalizeLoginInput(value));
+        }}
       />
 
       <TextInput
         style={styles.input}
+        autoCapitalize="none"
+        autoCorrect={false}
         placeholder="Senha"
         placeholderTextColor="#777"
         secureTextEntry
         value={password}
-        onChangeText={setPassword}
+        onChangeText={(value) => {
+          setPassword(normalizePasswordInput(value));
+        }}
       />
 
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
@@ -104,7 +119,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     width: '100%',
     maxWidth: 280,
-    backgroundColor: '#fff',
+    backgroundColor: '#f6f6f6',
     padding: 14,
     borderRadius: 8,
     alignItems: 'center',

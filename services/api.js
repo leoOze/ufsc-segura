@@ -52,15 +52,29 @@ export function login(loginValue, password) {
   });
 }
 
-export function register(loginValue, password) {
+export function register(loginValue, password, hwid) {
   return request('/register', {
     method: 'POST',
-    body: JSON.stringify({ login: loginValue, password }),
+    body: JSON.stringify({ hwid, login: loginValue, password }),
   });
 }
 
 export function getReports() {
   return request('/reports');
+}
+
+export function getAllReports() {
+  return request('/reports?status=all');
+}
+
+export function getReportStats({ month, status = 'all', year }) {
+  const params = new URLSearchParams({
+    month: String(month),
+    status,
+    year: String(year),
+  });
+
+  return request(`/reports/stats?${params.toString()}`);
 }
 
 export function createReport(report) {

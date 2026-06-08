@@ -1,11 +1,22 @@
 import { Tabs } from 'expo-router';
 import { Image, StyleSheet } from 'react-native';
 
-function TabIcon({ source }) {
+const tabIcons = {
+  home: require('../../assets/icons/home.png'),
+  mainmap: require('../../assets/icons/map.png'),
+  estatisticas: require('../../assets/icons/chart.png'),
+};
+
+function TabIcon({ source, color, size }) {
   return (
     <Image
       source={source}
-      style={{ width: 28, height: 28, resizeMode: 'contain' }}
+      style={{
+        width: size,
+        height: size,
+        resizeMode: 'contain',
+        tintColor: color,
+      }}
     />
   );
 }
@@ -15,8 +26,8 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: '#fff',
-        tabBarInactiveTintColor: '#aaa',
+        tabBarActiveTintColor: '#007aff',
+        tabBarInactiveTintColor: '#9ca3af',
       }}
     >
       <Tabs.Screen
@@ -24,8 +35,8 @@ export default function TabsLayout() {
         options={{
           title: 'Home',
           headerShown: false,
-          tabBarIcon: () => (
-            <TabIcon source={require('../../assets/home-icon.png')} />
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon source={tabIcons.home} color={color} size={size} />
           ),
         }}
       />
@@ -34,8 +45,8 @@ export default function TabsLayout() {
         options={{
           title: 'Mapa',
           headerShown: false,
-          tabBarIcon: () => (
-            <TabIcon source={require('../../assets/icon.png')} />
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon source={tabIcons.mainmap} color={color} size={size} />
           ),
         }}
       />
@@ -44,8 +55,8 @@ export default function TabsLayout() {
         options={{
           title: 'Estatisticas',
           headerShown: false,
-          tabBarIcon: () => (
-            <TabIcon source={require('../../assets/brasao-ufsc-logo.png')} />
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon source={tabIcons.estatisticas} color={color} size={size} />
           ),
         }}
       />

@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Fragment, useEffect, useState } from 'react';
+import { Alert, Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import MapView, { Marker, Polygon, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import {
+  API_URL,
   createReport,
   downvoteReport,
   getReports,
   upvoteReport,
 } from '../../services/api';
+import { getToken } from '../../services/authStorage';
 
 const defaultRegion = {
   latitude: -27.6017,
@@ -16,98 +18,128 @@ const defaultRegion = {
   latitudeDelta: 0.005,
   longitudeDelta: 0.005,
 };
+const screenDimensions = Dimensions.get('window');
+const screenWidth = screenDimensions.width;
+const screenHeight = screenDimensions.height;
+const typePickerHorizontalPadding = 18;
+const typePickerInnerPadding = 14;
+const typeGridGap = 8;
+const typePickerWidth = Math.min(screenWidth - typePickerHorizontalPadding * 2, 380);
+const typeButtonWidth = Math.floor(
+  (typePickerWidth - typePickerInnerPadding * 2 - typeGridGap * 2) / 3
+);
+const REPORT_TITLE_MAX_LENGTH = 20;
+const REPORT_DESCRIPTION_MAX_LENGTH = 800;
+const reportDetailsBottomOffset = 86;
+const reportDetailsTopOffset = 24;
+const reportDetailsMaxHeight =
+  screenHeight - reportDetailsBottomOffset - reportDetailsTopOffset;
 
 const reportTypes = [
-  
   {
     id: 'atividadesuspeita',
-    title: 'Atividade Suspeita',
+    title: 'Atividade suspeita',
     geometry: 'marker',
-    color: '#d90429',
-    symbol: '!',
+    color: '#f59e0b',
+    icon: require('../../assets/icons/atividadesuspeita.png'),
   },
   {
     id: 'furto',
     title: 'Furto',
     geometry: 'marker',
-    color: '#d90429',
-    symbol: '!',
+    color: '#e11d48',
+    icon: require('../../assets/icons/furto.png'),
   },
   {
     id: 'assalto',
     title: 'Assalto',
     geometry: 'marker',
-    color: '#d90429',
-    symbol: '!',
+    color: '#b91c1c',
+    icon: require('../../assets/icons/assalto.png'),
+  },
+  {
+    id: 'rouboveiculo',
+    title: 'Roubo de veículos',
+    geometry: 'marker',
+    color: '#f97316',
+    icon: require('../../assets/icons/roubocarro.png'),
   },
   {
     id: 'sequestro',
     title: 'Sequestro',
     geometry: 'marker',
-    color: '#d90429',
-    symbol: '!',
+    color: '#6d28d9',
+    icon: require('../../assets/icons/sequestro.png'),
   },
   {
-    id: 'violenciasexual',
-    title: 'Violência Sexual',
+    id: 'violenciacontraamulher',
+    title: 'Violência contra a mulher',
     geometry: 'marker',
-    color: '#d90429',
-    symbol: '!',
+    color: '#c026d3',
+    icon: require('../../assets/icons/violenciamulher.png'),
   },
   {
     id: 'pichacao',
     title: 'Pichação',
     geometry: 'marker',
-    color: '#d90429',
-    symbol: '!',
+    color: '#8b5cf6',
+    icon: require('../../assets/icons/pichacao.png'),
   },
   {
     id: 'buraco',
     title: 'Buraco',
     geometry: 'marker',
-    color: '#6909f1',
-    symbol: '!',
+    color: '#92400e',
+    icon: require('../../assets/icons/buraco.png'),
   },
   {
     id: 'problemasnacerca',
-    title: 'Problemas na cerca (furo, rasgo ou não tem)',
+    title: 'Problemas na cerca',
     geometry: 'marker',
-    color: '#6909f1',
-    symbol: '!',
+    color: '#475569',
+    icon: require('../../assets/icons/buraconacerca.png'),
   },
   {
     id: 'vazamento',
     title: 'Vazamento',
     geometry: 'marker',
-    color: '#d90429',
-    symbol: '!',
+    color: '#06b6d4',
+    icon: require('../../assets/icons/vazamento.png'),
   },
   {
     id: 'alagamento',
     title: 'Alagamento',
     geometry: 'marker',
-    color: '#d90429',
-    symbol: '!',
+    color: '#2563eb',
+    icon: require('../../assets/icons/alagamento.png'),
   },
   {
     id: 'problemaestrutural',
-    title: 'Problema Estrutural',
+    title: 'Problema estrutural',
     geometry: 'marker',
-    color: '#d90429',
-    symbol: '!',
+    color: '#78716c',
+    icon: require('../../assets/icons/infraestrutura.png'),
   },
   {
     id: 'dark-area',
     title: 'Local sem luz',
     geometry: 'polygon',
-    color: '#000000',
+    color: '#111827',
+    icon: require('../../assets/icons/ruasemluz.png'),
+  },
+  {
+    id: 'gramaalta',
+    title: 'Grama alta',
+    geometry: 'marker',
+    color: '#16a34a',
+    icon: require('../../assets/icons/gramaalta.png'),
   },
   {
     id: 'outro',
     title: 'Outro',
     geometry: 'marker',
-    color: '#d90429',
-    symbol: '!',
+    color: '#14b8a6',
+    icon: require('../../assets/icons/outro.png'),
   },
 ];
 
@@ -132,16 +164,89 @@ function geoJsonPolygonToCoordinates(coordinates) {
   return coordinates[0].map(geoJsonPointToCoordinate);
 }
 
+function getPolygonCenter(coordinates) {
+  const polygonCoordinates = geoJsonPolygonToCoordinates(coordinates);
+  const uniqueCoordinates = polygonCoordinates.slice(0, -1);
+  const coordinateCount = uniqueCoordinates.length || polygonCoordinates.length;
+  const coordinatesToAverage = uniqueCoordinates.length ? uniqueCoordinates : polygonCoordinates;
+  const totals = coordinatesToAverage.reduce(
+    (accumulator, coordinate) => ({
+      latitude: accumulator.latitude + coordinate.latitude,
+      longitude: accumulator.longitude + coordinate.longitude,
+    }),
+    { latitude: 0, longitude: 0 }
+  );
+
+  return {
+    latitude: totals.latitude / coordinateCount,
+    longitude: totals.longitude / coordinateCount,
+  };
+}
+
+function getReportTypeById(typeId) {
+  return reportTypes.find((type) => type.id === typeId);
+}
+
+function hexToRgba(hex, alpha) {
+  const cleanHex = hex.replace('#', '');
+  const red = parseInt(cleanHex.slice(0, 2), 16);
+  const green = parseInt(cleanHex.slice(2, 4), 16);
+  const blue = parseInt(cleanHex.slice(4, 6), 16);
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getReportRemainingMilliseconds(report, currentTime) {
+  if (!report?.expiresAt) {
+    return null;
+  }
+
+  return new Date(report.expiresAt).getTime() - currentTime.getTime();
+}
+
+function formatReportRemainingTime(report, currentTime) {
+  if (report?.status === 'inativo') {
+    return 'inativo';
+  }
+
+  const remainingMilliseconds = getReportRemainingMilliseconds(report, currentTime);
+
+  if (remainingMilliseconds === null || remainingMilliseconds <= 0) {
+    return 'inativo';
+  }
+
+  const totalHours = Math.ceil(remainingMilliseconds / (60 * 60 * 1000));
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+
+  return `${days}d ${hours}h`;
+}
+
+function getReportDeadlineDescription(report, currentTime) {
+  const remainingTime = formatReportRemainingTime(report, currentTime);
+
+  if (remainingTime === 'inativo') {
+    return 'Essa ocorrência já está inativa.';
+  }
+
+  return `Essa ocorrência ficará inativa daqui ${remainingTime} caso não receba nenhum upvote.`;
+}
+
 export default function MainMap() {
   const [region, setRegion] = useState(defaultRegion);
   const [reports, setReports] = useState([]);
   const [selectedBackendReport, setSelectedBackendReport] = useState(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [isDeadlineInfoOpen, setIsDeadlineInfoOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
   const [selectedReportType, setSelectedReportType] = useState(null);
   const [reportTitle, setReportTitle] = useState('');
   const [reportDescription, setReportDescription] = useState('');
-  const [reportPhotoUrl, setReportPhotoUrl] = useState('');
   const [reportLocation, setReportLocation] = useState(null);
   const [reportAreaPoints, setReportAreaPoints] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
@@ -179,6 +284,16 @@ export default function MainMap() {
     loadReports();
   }, []);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60 * 1000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
+
   const isPolygonReport = selectedReportType?.geometry === 'polygon';
   const canConfirmReport = isPolygonReport
     ? reportAreaPoints.length >= 3
@@ -197,9 +312,8 @@ export default function MainMap() {
     setErrorMessage('');
     setSelectedBackendReport(null);
     setSelectedReportType(type);
-    setReportTitle(type.title);
+    setReportTitle('');
     setReportDescription('');
-    setReportPhotoUrl('');
     setSelectedPhotoUri(null);
     setReportLocation(
       type.geometry === 'polygon'
@@ -219,7 +333,6 @@ export default function MainMap() {
     setSelectedReportType(null);
     setReportTitle('');
     setReportDescription('');
-    setReportPhotoUrl('');
     setSelectedPhotoUri(null);
     setIsReportOpen(false);
     setIsTypePickerOpen(false);
@@ -262,6 +375,27 @@ export default function MainMap() {
     return true;
   }
 
+  function openImageAttachmentOptions() {
+    Alert.alert(
+      'Anexar imagem',
+      'Escolha de onde vem a imagem do report.',
+      [
+        {
+          text: 'Camera',
+          onPress: takeReportPhoto,
+        },
+        {
+          text: 'Galeria',
+          onPress: pickReportImage,
+        },
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+      ]
+    );
+  }
+
   async function pickReportImage() {
     const hasPermission = await askMediaPermission();
 
@@ -279,7 +413,6 @@ export default function MainMap() {
     if (!result.canceled) {
       const uri = result.assets[0].uri;
       setSelectedPhotoUri(uri);
-      setReportPhotoUrl(uri);
     }
   }
 
@@ -300,34 +433,85 @@ export default function MainMap() {
     if (!result.canceled) {
       const uri = result.assets[0].uri;
       setSelectedPhotoUri(uri);
-      setReportPhotoUrl(uri);
     }
   }
+
   async function uploadReportPhoto(uri) {
-  const formData = new FormData();
+    const formData = new FormData();
 
-  formData.append('photo', {
-    uri,
-    name: 'report-photo.jpg',
-    type: 'image/jpeg',
-  });
+    formData.append('photo', {
+      uri,
+      name: 'report-photo.jpg',
+      type: 'image/jpeg',
+    });
 
-  const response = await fetch(`${API_URL}/reports/photo`, {
-    method: 'POST',
-    body: formData,
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
+    const token = await getToken();
 
-  const data = await response.json();
+    if (!token) {
+      throw new Error('Login necessario para enviar foto');
+    }
 
-  if (!response.ok) {
-    throw new Error(data.error || 'Erro ao enviar foto');
+    const response = await fetch(`${API_URL}/reports/photo`, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Erro ao enviar foto');
+    }
+
+    return data.photoUrl;
   }
 
-  return data.photoUrl;
-}
+  function renderReportIcon(type, iconStyle = styles.markerIcon) {
+    if (type?.icon) {
+      return <Image source={type.icon} style={iconStyle} />;
+    }
+
+    return (
+      <Text style={styles.customMarkerText}>
+        {type?.symbol || '!'}
+      </Text>
+    );
+  }
+
+  function getMarkerMetrics() {
+    const latitudeDelta = region.latitudeDelta || defaultRegion.latitudeDelta;
+    const zoomProgress = clamp((0.018 - latitudeDelta) / 0.016, 0, 1);
+    const size = Math.round(34 + zoomProgress * 12);
+
+    return {
+      size,
+      borderRadius: size / 2,
+      iconSize: Math.round(size * 0.58),
+    };
+  }
+
+  function getMapMarkerStyle(type) {
+    const marker = getMarkerMetrics();
+
+    return {
+      width: marker.size,
+      height: marker.size,
+      borderRadius: marker.borderRadius,
+      borderColor: type?.color || '#d90429',
+    };
+  }
+
+  function getMapMarkerIconStyle() {
+    const marker = getMarkerMetrics();
+
+    return {
+      width: marker.iconSize,
+      height: marker.iconSize,
+      resizeMode: 'contain',
+    };
+  }
 
   function renderReportDraft() {
     if (!selectedReportType) {
@@ -349,7 +533,7 @@ export default function MainMap() {
             <Polygon
               coordinates={reportAreaPoints}
               strokeColor={selectedReportType.color}
-              fillColor="rgba(249, 199, 79, 0.28)"
+              fillColor={hexToRgba(selectedReportType.color, 0.28)}
               strokeWidth={3}
             />
           )}
@@ -387,15 +571,11 @@ export default function MainMap() {
       >
         <View
           style={[
-            styles.customMarker,
-            { backgroundColor: selectedReportType.color },
+            styles.mapMarker,
+            getMapMarkerStyle(selectedReportType),
           ]}
         >
-          {selectedReportType.icon ? (
-              <Image source={selectedReportType.icon} style={styles.markerIcon} />
-            ) : (
-              <Text style={styles.customMarkerText}>{selectedReportType.symbol}</Text>
-            )}
+          {renderReportIcon(selectedReportType, getMapMarkerIconStyle())}
         </View>
       </Marker>
     );
@@ -403,17 +583,25 @@ export default function MainMap() {
 
   function renderStoredReports() {
     return reports.map((report) => {
+      const reportType = getReportTypeById(report.typeId);
+
       if (report.geometry?.type === 'Point') {
         return (
           <Marker
             key={report._id}
             coordinate={geoJsonPointToCoordinate(report.geometry.coordinates)}
             onPress={() => {
+              setIsDeadlineInfoOpen(false);
               setSelectedBackendReport(report);
             }}
           >
-            <View style={styles.storedMarker}>
-              <Text style={styles.customMarkerText}>!</Text>
+            <View
+              style={[
+                styles.mapMarker,
+                getMapMarkerStyle(reportType),
+              ]}
+            >
+              {renderReportIcon(reportType, getMapMarkerIconStyle())}
             </View>
           </Marker>
         );
@@ -421,17 +609,36 @@ export default function MainMap() {
 
       if (report.geometry?.type === 'Polygon') {
         return (
-          <Polygon
-            key={report._id}
-            coordinates={geoJsonPolygonToCoordinates(report.geometry.coordinates)}
-            strokeColor="#f9c74f"
-            fillColor="rgba(249, 199, 79, 0.28)"
-            strokeWidth={3}
-            tappable
-            onPress={() => {
-              setSelectedBackendReport(report);
-            }}
-          />
+          <Fragment key={report._id}>
+            <Polygon
+              coordinates={geoJsonPolygonToCoordinates(report.geometry.coordinates)}
+              strokeColor={reportType?.color || '#111827'}
+              fillColor={hexToRgba(reportType?.color || '#111827', 0.28)}
+              strokeWidth={3}
+              tappable
+              onPress={() => {
+                setIsDeadlineInfoOpen(false);
+                setSelectedBackendReport(report);
+              }}
+            />
+
+            <Marker
+              coordinate={getPolygonCenter(report.geometry.coordinates)}
+              onPress={() => {
+                setIsDeadlineInfoOpen(false);
+                setSelectedBackendReport(report);
+              }}
+            >
+              <View
+                style={[
+                  styles.mapMarker,
+                  getMapMarkerStyle(reportType),
+                ]}
+              >
+                {renderReportIcon(reportType, getMapMarkerIconStyle())}
+              </View>
+            </Marker>
+          </Fragment>
         );
       }
 
@@ -442,22 +649,16 @@ export default function MainMap() {
   async function submitReport() {
     setErrorMessage('');
     setIsSubmitting(true);
-    let photoUrl = reportPhotoUrl.trim()
-    if (selectedPhotoUri?.startsWith('file://')) {
-  photoUrl = await uploadReportPhoto(selectedPhotoUri);
-}
-
-  await createReport({
-  title: reportTitle.trim(),
-  description: reportDescription.trim(),
-  photoUrl,
-  geometryType: isPolygonReport ? 'polygon' : 'point',
-  geometry,
-});
 
     try {
       if (!reportTitle.trim()) {
         throw new Error('Titulo e obrigatorio');
+      }
+
+      let photoUrl = '';
+
+      if (selectedPhotoUri) {
+        photoUrl = await uploadReportPhoto(selectedPhotoUri);
       }
 
       const geometry = isPolygonReport
@@ -474,7 +675,7 @@ export default function MainMap() {
         typeId: selectedReportType.id,
         title: reportTitle.trim(),
         description: reportDescription.trim(),
-        photoUrl: reportPhotoUrl.trim(),
+        photoUrl,
         geometryType: isPolygonReport ? 'polygon' : 'point',
         geometry,
       });
@@ -549,32 +750,49 @@ export default function MainMap() {
               setIsTypePickerOpen(true);
             }}
           >
-            <Text style={styles.reportButtonText}>+</Text>
+            <Text style={styles.reportButtonText}>ADICIONAR OCORRÊNCIA</Text>
           </Pressable>
         )}
 
       {isTypePickerOpen && (
         <View style={styles.centerActions}>
           <View style={styles.typePicker}>
-            <Text style={styles.typePickerTitle}>Tipo de report</Text>
+            <View style={styles.typePickerHeader}>
+              <Text style={styles.typePickerTitle}>Tipo de ocorrência</Text>
 
-            {reportTypes.map((type) => (
               <Pressable
-                key={type.id}
-                style={styles.typeButton}
+                style={styles.typePickerClose}
                 onPress={() => {
-                  startReport(type);
+                  setIsTypePickerOpen(false);
                 }}
               >
-                <View
-                  style={[
-                    styles.typeSwatch,
-                    { backgroundColor: type.color },
-                  ]}
-                />
-                <Text style={styles.typeButtonText}>{type.title}</Text>
+                <Text style={styles.typePickerCloseText}>×</Text>
               </Pressable>
-            ))}
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.typeGrid}
+              showsVerticalScrollIndicator={false}
+            >
+              {reportTypes.map((type) => (
+                <Pressable
+                  key={type.id}
+                  style={({ pressed }) => [
+                    styles.typeButton,
+                    { borderColor: type.color },
+                    pressed && styles.typeButtonPressed,
+                  ]}
+                  onPress={() => {
+                    startReport(type);
+                  }}
+                >
+                  <View style={styles.typeIconWrap}>
+                    {renderReportIcon(type, styles.typeIcon)}
+                  </View>
+                  <Text style={styles.typeButtonText}>{type.title}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
         </View>
       )}
@@ -614,53 +832,134 @@ export default function MainMap() {
 
       {selectedBackendReport && !selectedReportType && (
         <View style={styles.reportDetailsPanel}>
-          <Text style={styles.reportDetailsTitle}>
-            {selectedBackendReport.title ||
-              (selectedBackendReport.geometryType === 'polygon'
-                ? 'Local sem luz'
-                : 'Ocorrencia')}
-          </Text>
+          <View style={styles.reportDetailsHeader}>
+            <View style={styles.reportDetailsHeading}>
+              <View style={styles.reportDetailsTitleRow}>
+                <Text style={styles.reportDetailsTitle} numberOfLines={2}>
+                  {selectedBackendReport.title ||
+                    (selectedBackendReport.geometryType === 'polygon'
+                      ? 'Local sem luz'
+                      : 'Ocorrencia')}
+                </Text>
 
-          {selectedBackendReport.description ? (
-            <Text style={styles.reportDetailsText}>
-              {selectedBackendReport.description}
-            </Text>
-          ) : null}
+                <Pressable
+                  style={styles.deadlinePill}
+                  onPress={() => {
+                    setIsDeadlineInfoOpen((currentValue) => !currentValue);
+                  }}
+                >
+                  <Text style={styles.deadlinePillText}>
+                    {formatReportRemainingTime(selectedBackendReport, currentTime)}
+                  </Text>
+                </Pressable>
+              </View>
 
-          {selectedBackendReport.photoUrl ? (
-            <Image
-              source={{ uri: selectedBackendReport.photoUrl }}
-              style={styles.reportPhoto}
-            />
-          ) : null}
+              <View
+                style={[
+                  styles.reportTypeChip,
+                  {
+                    borderColor:
+                      getReportTypeById(selectedBackendReport.typeId)?.color ||
+                      '#111827',
+                  },
+                ]}
+              >
+                <Text style={styles.reportTypeChipText}>
+                  {getReportTypeById(selectedBackendReport.typeId)?.title ||
+                    (selectedBackendReport.geometryType === 'polygon'
+                      ? 'Área'
+                      : 'Ponto')}
+                </Text>
+              </View>
 
-          <Text style={styles.reportDetailsText}>
-            Upvotes: {selectedBackendReport.upVotes || 0}
-          </Text>
-          <Text style={styles.reportDetailsText}>
-            Downvotes: {selectedBackendReport.downVotes || 0}
-          </Text>
+              {isDeadlineInfoOpen ? (
+                <View style={styles.deadlineInfoBox}>
+                  <Text style={styles.deadlineInfoText}>
+                    {getReportDeadlineDescription(selectedBackendReport, currentTime)}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
 
-          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
-
-          <View style={styles.voteActions}>
-            <Pressable style={styles.voteButton} onPress={() => handleVote('up')}>
-              <Text style={styles.voteButtonText}>Upvote</Text>
-            </Pressable>
-            <Pressable style={styles.voteButton} onPress={() => handleVote('down')}>
-              <Text style={styles.voteButtonText}>Downvote</Text>
+            <Pressable
+              style={styles.closeDetailsIconButton}
+              onPress={() => {
+                setSelectedBackendReport(null);
+                setIsDeadlineInfoOpen(false);
+                setErrorMessage('');
+              }}
+            >
+              <Text style={styles.closeDetailsIconText}>×</Text>
             </Pressable>
           </View>
 
-          <Pressable
-            style={styles.closeDetailsButton}
-            onPress={() => {
-              setSelectedBackendReport(null);
-              setErrorMessage('');
-            }}
-          >
-            <Text style={styles.closeDetailsText}>Fechar</Text>
-          </Pressable>
+          {selectedBackendReport.photoUrl ? (
+            <View style={styles.reportPhotoFrame}>
+              <Image
+                source={{ uri: selectedBackendReport.photoUrl }}
+                style={styles.reportPhoto}
+              />
+            </View>
+          ) : null}
+
+          <Text style={styles.descriptionLabel}>Descrição</Text>
+
+          <View style={styles.reportDescriptionBox}>
+            <ScrollView
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              contentContainerStyle={styles.reportDescriptionContent}
+            >
+              <Text style={styles.reportDetailsText}>
+                {selectedBackendReport.description || 'Sem descrição.'}
+              </Text>
+            </ScrollView>
+          </View>
+
+          <View style={styles.reportDetailsErrorSlot}>
+            {errorMessage ? (
+              <Text style={styles.reportDetailsError} numberOfLines={1}>
+                {errorMessage}
+              </Text>
+            ) : null}
+          </View>
+
+          <View style={styles.reportDetailsFooter}>
+            <View style={styles.voteActions}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.voteIconButton,
+                  styles.upvoteButton,
+                  pressed && styles.voteButtonPressed,
+                ]}
+                onPress={() => handleVote('up')}
+              >
+                <Image
+                  source={require('../../assets/icons/upvote.png')}
+                  style={styles.voteIcon}
+                />
+              </Pressable>
+
+              <Text style={styles.voteScore}>
+                {(selectedBackendReport.upVotes || 0) -
+                  (selectedBackendReport.downVotes || 0)}
+              </Text>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.voteIconButton,
+                  styles.downvoteButton,
+                  pressed && styles.voteButtonPressed,
+                ]}
+                onPress={() => handleVote('down')}
+              >
+                <Image
+                  source={require('../../assets/icons/downvote.png')}
+                  style={styles.voteIcon}
+                />
+              </Pressable>
+            </View>
+          </View>
         </View>
       )}
 
@@ -679,7 +978,8 @@ export default function MainMap() {
 
             <TextInput
               style={styles.input}
-              placeholder="Titulo"
+              placeholder="Titulo obrigatorio"
+              maxLength={REPORT_TITLE_MAX_LENGTH}
               value={reportTitle}
               onChangeText={setReportTitle}
             />
@@ -689,49 +989,37 @@ export default function MainMap() {
               multiline
               placeholder="Descricao"
               textAlignVertical="top"
+              maxLength={REPORT_DESCRIPTION_MAX_LENGTH}
               value={reportDescription}
               onChangeText={setReportDescription}
             />
+            <Text style={styles.characterCounter}>
+              {reportDescription.length}/{REPORT_DESCRIPTION_MAX_LENGTH}
+            </Text>
 
-            <TextInput
-              style={styles.input}
-              autoCapitalize="none"
-              keyboardType="url"
-              placeholder="URL da foto"
-              value={reportPhotoUrl}
-              onChangeText={(value) => {
-                setReportPhotoUrl(value);
-                setSelectedPhotoUri(value);
-              }}
-            />
-
-            <View style={styles.photoActions}>
-              <Pressable style={styles.photoButton} onPress={pickReportImage}>
-                <Text style={styles.photoButtonText}>Galeria</Text>
-              </Pressable>
-
-              <Pressable style={styles.photoButton} onPress={takeReportPhoto}>
-                <Text style={styles.photoButtonText}>Camera</Text>
-              </Pressable>
-            </View>
-
-            {selectedPhotoUri ? (
-              <>
+            <Pressable style={styles.photoDropzone} onPress={openImageAttachmentOptions}>
+              {selectedPhotoUri ? (
                 <Image
                   source={{ uri: selectedPhotoUri }}
                   style={styles.selectedPhoto}
                 />
+              ) : (
+                <>
+                  <Text style={styles.photoDropzoneText}>anexe uma imagem</Text>
+                  <Text style={styles.photoDropzoneAscii}>^</Text>
+                </>
+              )}
+            </Pressable>
 
-                <Pressable
-                  style={styles.secondaryPanelButton}
-                  onPress={() => {
-                    setSelectedPhotoUri(null);
-                    setReportPhotoUrl('');
-                  }}
-                >
-                  <Text style={styles.secondaryPanelButtonText}>Remover foto</Text>
-                </Pressable>
-              </>
+            {selectedPhotoUri ? (
+              <Pressable
+                style={styles.secondaryPanelButton}
+                onPress={() => {
+                  setSelectedPhotoUri(null);
+                }}
+              >
+                <Text style={styles.secondaryPanelButtonText}>Remover imagem</Text>
+              </Pressable>
             ) : null}
 
             {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
@@ -778,43 +1066,103 @@ const styles = StyleSheet.create({
     left: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    paddingHorizontal: 18,
+    paddingTop: 58,
+    paddingBottom: 96,
+    backgroundColor: 'rgba(0, 0, 0, 0.18)',
   },
 
   typePicker: {
-    width: '100%',
-    maxWidth: 320,
-    backgroundColor: '#000',
-    borderRadius: 8,
-    padding: 16,
+    width: typePickerWidth,
+    maxWidth: 380,
+    maxHeight: '82%',
+    backgroundColor: 'rgba(246, 246, 246, 0.96)',
+    borderRadius: 22,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 12,
+    },
+    shadowOpacity: 0.24,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+
+  typePickerHeader: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
   },
 
   typePickerTitle: {
-    color: '#fff',
+    color: '#111',
     fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 12,
+    fontWeight: '800',
+  },
+
+  typePickerClose: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  typePickerCloseText: {
+    color: '#111',
+    fontSize: 24,
+    lineHeight: 26,
+    fontWeight: '500',
+  },
+
+  typeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingBottom: 4,
   },
 
   typeButton: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 8,
-    padding: 14,
-    marginTop: 8,
-    flexDirection: 'row',
+    width: typeButtonWidth,
+    minHeight: 104,
+    backgroundColor: '#f6f6f6',
+    borderRadius: 12,
+    borderWidth: 1.4,
+    paddingHorizontal: 6,
+    paddingVertical: 10,
     alignItems: 'center',
+    justifyContent: 'center',
   },
 
-  typeSwatch: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    marginRight: 10,
+  typeButtonPressed: {
+    opacity: 0.68,
+    transform: [{ scale: 0.98 }],
+  },
+
+  typeIconWrap: {
+    width: 56,
+    height: 56,
+    marginBottom: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  typeIcon: {
+    width: 50,
+    height: 50,
+    resizeMode: 'contain',
   },
 
   typeButtonText: {
-    color: '#fff',
-    fontWeight: '700',
+    color: '#111',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '800',
+    textAlign: 'center',
   },
 
   bottomActions: {
@@ -877,56 +1225,72 @@ const styles = StyleSheet.create({
 
   reportButton: {
     position: 'absolute',
-    right: 20,
-    bottom: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#000',
+    right: 36,
+    bottom: 28,
+    left: 36,
+    minHeight: 54,
+    borderRadius: 18,
+    backgroundColor: 'rgba(246, 246, 246, 0.94)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(246, 246, 246, 0.75)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    elevation: 8,
   },
 
   reportButtonText: {
-    color: '#fff',
-    fontSize: 32,
-    lineHeight: 34,
-    fontWeight: '600',
+    color: '#111',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0,
   },
 
-  customMarker: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#d90429',
+  mapMarker: {
+    backgroundColor: '#f6f6f6',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.22,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+
+  markerIcon: {
+    width: 24,
+    height: 24,
+    resizeMode: 'contain',
   },
 
   customMarkerText: {
-    color: '#fff',
+    color: '#111',
     fontWeight: '700',
   },
 
-  storedMarker: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#d90429',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   areaPointMarker: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   areaPointText: {
-    color: '#000',
+    color: '#fff',
+    fontSize: 12,
+    lineHeight: 14,
     fontWeight: '700',
   },
 
@@ -945,7 +1309,7 @@ const styles = StyleSheet.create({
   reportPanel: {
     width: '100%',
     maxWidth: 340,
-    backgroundColor: '#fff',
+    backgroundColor: '#f6f6f6',
     borderRadius: 8,
     padding: 20,
   },
@@ -978,31 +1342,47 @@ const styles = StyleSheet.create({
     minHeight: 96,
   },
 
-  photoActions: {
-    flexDirection: 'row',
-    gap: 8,
+  characterCounter: {
+    alignSelf: 'flex-end',
+    color: '#64748b',
+    fontSize: 12,
+    marginTop: -6,
     marginBottom: 10,
   },
 
-  photoButton: {
-    flex: 1,
-    backgroundColor: '#222',
+  photoDropzone: {
+    width: '100%',
+    minHeight: 132,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#9ca3af',
     borderRadius: 8,
-    padding: 12,
+    backgroundColor: '#f8fafc',
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    overflow: 'hidden',
   },
 
-  photoButtonText: {
-    color: '#fff',
-    fontWeight: '700',
+  photoDropzoneText: {
+    color: '#111',
+    fontSize: 15,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+
+  photoDropzoneAscii: {
+    color: '#64748b',
+    fontSize: 34,
+    lineHeight: 36,
+    fontWeight: '800',
+    marginTop: 4,
   },
 
   selectedPhoto: {
     width: '100%',
-    height: 160,
-    borderRadius: 8,
+    height: 132,
     backgroundColor: '#e7e7e7',
-    marginBottom: 8,
   },
 
   errorText: {
@@ -1036,60 +1416,235 @@ const styles = StyleSheet.create({
   reportDetailsPanel: {
     position: 'absolute',
     right: 20,
-    bottom: 24,
+    bottom: reportDetailsBottomOffset,
     left: 20,
-    backgroundColor: '#fff',
-    borderRadius: 8,
+    maxHeight: reportDetailsMaxHeight,
+    backgroundColor: '#f6f6f6',
+    borderRadius: 16,
     padding: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 10,
   },
 
-  reportDetailsTitle: {
-    color: '#000',
-    fontSize: 18,
-    fontWeight: '700',
+  reportDetailsHeader: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     marginBottom: 8,
   },
 
+  reportDetailsHeading: {
+    flex: 1,
+    paddingRight: 12,
+  },
+
+  reportDetailsTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 6,
+  },
+
+  reportDetailsTitle: {
+    flex: 1,
+    color: '#000',
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '800',
+  },
+
+  deadlinePill: {
+    minWidth: 64,
+    borderWidth: 1.5,
+    borderColor: '#111827',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(246, 246, 246, 0.94)',
+    alignItems: 'center',
+  },
+
+  deadlinePillText: {
+    color: '#111827',
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '900',
+  },
+
+  deadlineInfoBox: {
+    alignSelf: 'flex-start',
+    maxWidth: '96%',
+    backgroundColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginTop: 8,
+  },
+
+  deadlineInfoText: {
+    color: '#334155',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+
+  reportTypeChip: {
+    alignSelf: 'flex-start',
+    borderWidth: 1.5,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: '#f8fafc',
+  },
+
+  reportTypeChipText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+
+  closeDetailsIconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  closeDetailsIconText: {
+    color: '#111',
+    fontSize: 28,
+    lineHeight: 30,
+    fontWeight: '500',
+  },
+
+  descriptionLabel: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+
+  reportDescriptionBox: {
+    height: 132,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    backgroundColor: '#f8fafc',
+    marginBottom: 0,
+    overflow: 'hidden',
+  },
+
+  reportDescriptionContent: {
+    padding: 12,
+  },
+
   reportDetailsText: {
-    color: '#333',
-    marginBottom: 4,
+    color: '#1f2937',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
+  reportPhotoFrame: {
+    width: '100%',
+    height: 92,
+    borderRadius: 10,
+    backgroundColor: '#e7e7e7',
+    marginBottom: 8,
+    overflow: 'hidden',
   },
 
   reportPhoto: {
     width: '100%',
-    height: 160,
-    borderRadius: 8,
-    backgroundColor: '#e7e7e7',
-    marginBottom: 12,
+    height: '100%',
+  },
+
+  reportDetailsErrorSlot: {
+    minHeight: 20,
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+
+  reportDetailsError: {
+    color: '#d90429',
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '700',
+  },
+
+  reportDetailsFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
   },
 
   voteActions: {
     flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: 8,
-    marginTop: 12,
+    backgroundColor: 'rgba(246, 246, 246, 0.94)',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(246, 246, 246, 0.75)',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    elevation: 4,
   },
 
-  voteButton: {
-    flex: 1,
-    backgroundColor: '#000',
-    padding: 12,
-    borderRadius: 8,
+  voteIconButton: {
+    width: 29,
+    height: 29,
+    borderRadius: 15,
+    borderWidth: 2,
     alignItems: 'center',
+    justifyContent: 'center',
   },
 
-  voteButtonText: {
-    color: '#fff',
-    fontWeight: '700',
+  upvoteButton: {
+    borderColor: '#2563eb',
+    backgroundColor: 'rgba(37, 99, 235, 0.5)',
   },
 
-  closeDetailsButton: {
-    padding: 12,
-    alignItems: 'center',
-    marginTop: 4,
+  downvoteButton: {
+    borderColor: '#ef4444',
+    backgroundColor: 'rgba(239, 68, 68, 0.5)',
   },
 
-  closeDetailsText: {
-    color: '#000',
-    fontWeight: '700',
+  voteButtonPressed: {
+    opacity: 0.72,
   },
+
+  voteIcon: {
+    width: 19,
+    height: 19,
+    resizeMode: 'contain',
+  },
+
+  voteScore: {
+    minWidth: 18,
+    color: '#111827',
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+
 });
