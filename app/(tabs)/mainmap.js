@@ -4,13 +4,12 @@ import MapView, { Marker, Polygon, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  API_URL,
   createReport,
   downvoteReport,
   getReports,
+  uploadReportPhoto,
   upvoteReport,
 } from '../../services/api';
-import { getToken } from '../../services/authStorage';
 
 const defaultRegion = {
   latitude: -27.6017,
@@ -251,7 +250,7 @@ export default function MainMap() {
   const [reportAreaPoints, setReportAreaPoints] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedPhotoUri, setSelectedPhotoUri] = useState(null);
+  const [selectedPhotoAsset, setSelectedPhotoAsset] = useState(null);
 
   useEffect(() => {
     async function getLocation() {
@@ -314,7 +313,7 @@ export default function MainMap() {
     setSelectedReportType(type);
     setReportTitle('');
     setReportDescription('');
-    setSelectedPhotoUri(null);
+    setSelectedPhotoAsset(null);
     setReportLocation(
       type.geometry === 'polygon'
         ? null
@@ -333,7 +332,7 @@ export default function MainMap() {
     setSelectedReportType(null);
     setReportTitle('');
     setReportDescription('');
-    setSelectedPhotoUri(null);
+    setSelectedPhotoAsset(null);
     setIsReportOpen(false);
     setIsTypePickerOpen(false);
     setErrorMessage('');
@@ -411,8 +410,7 @@ export default function MainMap() {
     });
 
     if (!result.canceled) {
-      const uri = result.assets[0].uri;
-      setSelectedPhotoUri(uri);
+      setSelectedPhotoAsset(result.assets[0]);
     }
   }
 
@@ -431,41 +429,8 @@ export default function MainMap() {
     });
 
     if (!result.canceled) {
-      const uri = result.assets[0].uri;
-      setSelectedPhotoUri(uri);
+      setSelectedPhotoAsset(result.assets[0]);
     }
-  }
-
-  async function uploadReportPhoto(uri) {
-    const formData = new FormData();
-
-    formData.append('photo', {
-      uri,
-      name: 'report-photo.jpg',
-      type: 'image/jpeg',
-    });
-
-    const token = await getToken();
-
-    if (!token) {
-      throw new Error('Login necessario para enviar foto');
-    }
-
-    const response = await fetch(`${API_URL}/reports/photo`, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Erro ao enviar foto');
-    }
-
-    return data.photoUrl;
   }
 
   function renderReportIcon(type, iconStyle = styles.markerIcon) {
@@ -657,8 +622,8 @@ export default function MainMap() {
 
       let photoUrl = '';
 
-      if (selectedPhotoUri) {
-        photoUrl = await uploadReportPhoto(selectedPhotoUri);
+      if (selectedPhotoAsset) {
+        photoUrl = await uploadReportPhoto(selectedPhotoAsset);
       }
 
       const geometry = isPolygonReport
@@ -998,9 +963,9 @@ export default function MainMap() {
             </Text>
 
             <Pressable style={styles.photoDropzone} onPress={openImageAttachmentOptions}>
-              {selectedPhotoUri ? (
+              {selectedPhotoAsset ? (
                 <Image
-                  source={{ uri: selectedPhotoUri }}
+                  source={{ uri: selectedPhotoAsset.uri }}
                   style={styles.selectedPhoto}
                 />
               ) : (
@@ -1011,11 +976,11 @@ export default function MainMap() {
               )}
             </Pressable>
 
-            {selectedPhotoUri ? (
+            {selectedPhotoAsset ? (
               <Pressable
                 style={styles.secondaryPanelButton}
                 onPress={() => {
-                  setSelectedPhotoUri(null);
+                  setSelectedPhotoAsset(null);
                 }}
               >
                 <Text style={styles.secondaryPanelButtonText}>Remover imagem</Text>
@@ -1556,9 +1521,10 @@ const styles = StyleSheet.create({
 
   reportPhotoFrame: {
     width: '100%',
-    height: 92,
-    borderRadius: 10,
-    backgroundColor: '#e7e7e7',
+    height: 180,
+    minHeight: 180,
+    borderRadius: 12,
+    backgroundColor: '#111',
     marginBottom: 8,
     overflow: 'hidden',
   },
@@ -1566,6 +1532,8 @@ const styles = StyleSheet.create({
   reportPhoto: {
     width: '100%',
     height: '100%',
+    borderRadius: 12,
+    resizeMode: 'contain',
   },
 
   reportDetailsErrorSlot: {

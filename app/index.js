@@ -1,5 +1,6 @@
 import { Redirect } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { getCurrentUser } from '../services/api';
 import { getToken } from '../services/authStorage';
 
 export default function Index() {
@@ -8,7 +9,18 @@ export default function Index() {
   useEffect(() => {
     async function checkToken() {
       const token = await getToken();
-      setRedirectTo(token ? '/home' : '/login');
+
+      if (!token) {
+        setRedirectTo('/login');
+        return;
+      }
+
+      try {
+        await getCurrentUser();
+        setRedirectTo('/home');
+      } catch {
+        setRedirectTo('/login');
+      }
     }
 
     checkToken();

@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { NativeModules } from 'react-native';
 
 const FALLBACK_DEVICE_ID_KEY = 'ufsc_segura_fallback_device_id';
 
@@ -20,9 +21,11 @@ async function getFallbackDeviceId() {
 }
 
 async function getNativeDeviceId() {
+  if (!NativeModules.RNDeviceInfo) {
+    return '';
+  }
+
   try {
-    // react-native-device-info is not available inside Expo Go. Requiring it
-    // lazily keeps the app from crashing before we can use a dev fallback.
     const DeviceInfo = require('react-native-device-info').default;
     const uniqueId = await DeviceInfo.getUniqueId();
 
